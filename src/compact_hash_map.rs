@@ -1,20 +1,20 @@
 extern crate primal;
 
-use super::simple_allocator_trait::{Allocator, DefaultHeap};
 use super::compact::Compact;
-use super::pointer_to_maybe_compact::PointerToMaybeCompact;
 use super::compact_vec::CompactVec;
-use std::iter::Iterator;
+use super::pointer_to_maybe_compact::PointerToMaybeCompact;
+use super::simple_allocator_trait::{Allocator, DefaultHeap};
 use std::collections::hash_map::DefaultHasher;
 #[cfg(test)]
 use std::collections::HashMap;
-use std::hash::Hasher;
 use std::hash::Hash;
+use std::hash::Hasher;
+use std::iter::Iterator;
 
+use std;
+use std::fmt::Write;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::fmt::Write;
-use std;
 use std::ptr;
 
 #[derive(Clone)]
@@ -34,7 +34,7 @@ struct CompactArray<T, A: Allocator = DefaultHeap> {
     /// Points to either compact or free storage
     ptr: PointerToMaybeCompact<T>,
     /// Maximum capacity before needing to spill onto the heap
-    cap: usize,
+    cap: u32,
     _alloc: PhantomData<*const A>,
 }
 
@@ -63,8 +63,8 @@ struct QuadraticProbingMutIterator<'a, K: 'a, V: 'a, A: 'a + Allocator = Default
 /// that can be stored in compact sequential storage and
 /// automatically spills over into free heap storage using `Allocator`.
 pub struct OpenAddressingMap<K, V, A: Allocator = DefaultHeap> {
-    number_alive: usize,
-    number_used: usize,
+    number_alive: u32,
+    number_used: u32,
     entries: CompactArray<Entry<K, V>, A>,
 }
 
@@ -242,7 +242,7 @@ impl<T: Default, A: Allocator> CompactArray<T, A> {
     pub fn with_capacity(cap: usize) -> CompactArray<T, A> {
         let mut vec = CompactArray {
             ptr: PointerToMaybeCompact::default(),
-            cap,
+            cap: cap as u32,
             _alloc: PhantomData,
         };
 
@@ -256,7 +256,7 @@ impl<T: Default, A: Allocator> CompactArray<T, A> {
     }
 
     pub fn capacity(&self) -> usize {
-        self.cap
+        self.cap as usize
     }
 }
 
@@ -271,7 +271,7 @@ impl<T, A: Allocator> From<Vec<T>> for CompactArray<T, A> {
 
         CompactArray {
             ptr: PointerToMaybeCompact::new_free(p),
-            cap,
+            cap: cap as u32,
             _alloc: PhantomData,
         }
     }
@@ -283,7 +283,7 @@ impl<T, A: Allocator> Drop for CompactArray<T, A> {
         unsafe { ptr::drop_in_place(&mut self[..]) };
         if !self.ptr.is_compact() {
             unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap);
+                A::deallocate(self.ptr.mut_ptr(), self.cap as usize);
             }
         }
     }
@@ -293,13 +293,13 @@ impl<T, A: Allocator> Deref for CompactArray<T, A> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
-        unsafe { ::std::slice::from_raw_parts(self.ptr.ptr(), self.cap) }
+        unsafe { ::std::slice::from_raw_parts(self.ptr.ptr(), self.cap as usize) }
     }
 }
 
 impl<T, A: Allocator> DerefMut for CompactArray<T, A> {
     fn deref_mut(&mut self) -> &mut [T] {
-        unsafe { ::std::slice::from_raw_parts_mut(self.ptr.mut_ptr(), self.cap) }
+        unsafe { ::std::slice::from_raw_parts_mut(self.ptr.mut_ptr(), self.cap as usize) }
     }
 }
 
@@ -341,7 +341,7 @@ impl<T, A: Allocator> IntoIterator for CompactArray<T, A> {
     fn into_iter(self) -> Self::IntoIter {
         let iter = IntoIter {
             ptr: unsafe { ptr::read(&self.ptr) },
-            cap: self.cap,
+            cap: self.cap as usize,
             index: 0,
             _alloc: PhantomData,
         };
@@ -374,7 +374,7 @@ impl<T: Compact + Sized, A: Allocator> Compact for CompactArray<T, A> {
     }
 
     default fn dynamic_size_bytes(&self) -> usize {
-        self.cap * ::std::mem::size_of::<T>()
+        self.cap as usize * ::std::mem::size_of::<T>()
             + self
                 .iter()
                 .map(|elem| elem.dynamic_size_bytes())
@@ -385,8 +385,8 @@ impl<T: Compact + Sized, A: Allocator> Compact for CompactArray<T, A> {
         (*dest).cap = (*source).cap;
         (*dest).ptr.set_to_compact(new_dynamic_part as *mut T);
 
-        let mut offset = (*source).cap * ::std::mem::size_of::<T>();
-        for i in 0..(*source).cap {
+        let mut offset = (*source).cap as usize * ::std::mem::size_of::<T>();
+        for i in 0..(*source).cap as usize {
             Compact::compact(
                 &mut (*source)[i],
                 &mut (*dest)[i],
@@ -416,13 +416,17 @@ impl<T: TrivialCompact + Compact, A: Allocator> Compact for CompactArray<T, A> {
     }
 
     fn dynamic_size_bytes(&self) -> usize {
-        self.cap * ::std::mem::size_of::<T>()
+        self.cap as usize * ::std::mem::size_of::<T>()
     }
 
     unsafe fn compact(source: *mut Self, dest: *mut Self, new_dynamic_part: *mut u8) {
         (*dest).cap = (*source).cap;
         (*dest).ptr.set_to_compact(new_dynamic_part as *mut T);
-        ptr::copy_nonoverlapping((*source).ptr.ptr(), (*dest).ptr.mut_ptr(), (*source).cap);
+        ptr::copy_nonoverlapping(
+            (*source).ptr.ptr(),
+            (*dest).ptr.mut_ptr(),
+            (*source).cap as usize,
+        );
     }
 }
 
@@ -434,9 +438,9 @@ impl<T: Clone, A: Allocator> Clone for CompactArray<T, A> {
 
 impl<T: Copy + Default, A: Allocator> Clone for CompactArray<T, A> {
     fn clone(&self) -> CompactArray<T, A> {
-        let mut new_vec = Self::with_capacity(self.cap);
+        let mut new_vec = Self::with_capacity(self.cap as usize);
         unsafe {
-            ptr::copy_nonoverlapping(self.ptr.ptr(), new_vec.ptr.mut_ptr(), self.cap);
+            ptr::copy_nonoverlapping(self.ptr.ptr(), new_vec.ptr.mut_ptr(), self.cap as usize);
         }
         new_vec
     }
@@ -459,7 +463,7 @@ impl<'a, K, V, A: Allocator> QuadraticProbingIterator<'a, K, V, A> {
     ) -> QuadraticProbingIterator<K, V, A> {
         QuadraticProbingIterator {
             i: 0,
-            number_used: map.entries.cap,
+            number_used: map.entries.cap as usize,
             hash,
             map,
         }
@@ -473,7 +477,7 @@ impl<'a, K, V, A: Allocator> QuadraticProbingMutIterator<'a, K, V, A> {
     ) -> QuadraticProbingMutIterator<K, V, A> {
         QuadraticProbingMutIterator {
             i: 0,
-            number_used: map.entries.cap,
+            number_used: map.entries.cap as usize,
             hash,
             map,
         }
@@ -521,13 +525,13 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> OpenAddressingMap<K, V, A> {
 
     /// Amount of entries in the dictionary
     pub fn len(&self) -> usize {
-        self.number_alive
+        self.number_alive as usize
     }
 
     /// Amount of used entries in the dictionary
     #[cfg(test)]
     pub fn len_used(&self) -> usize {
-        self.number_used
+        self.number_used as usize
     }
 
     /// Capacity of the dictionary
@@ -657,14 +661,14 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> OpenAddressingMap<K, V, A> {
     }
 
     fn ensure_capacity(&mut self) {
-        if self.number_used > self.entries.capacity() / 2 {
+        if self.number_used as usize > self.entries.capacity() / 2 {
             let old_entries = self.entries.clone();
 
             let mut new_capacity = Self::find_prime_larger_than(old_entries.capacity() * 2);
 
             // if there are lots of dead entries we do not need to double
             // we are going to just garbage collect them
-            let number_dead = self.entries.capacity() - self.number_alive;
+            let number_dead = self.entries.capacity() - self.number_alive as usize;
             if number_dead > self.entries.capacity() / 2 {
                 new_capacity = old_entries.capacity();
             }
