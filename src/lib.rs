@@ -29,6 +29,9 @@ mod compact_hash_map;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(feature = "serde-serialization")]
+extern crate serde;
+
 pub use self::compact::Compact;
 pub use self::compact_option::CompactOption as COption;
 pub use self::compact_vec::CompactVec as CVec;

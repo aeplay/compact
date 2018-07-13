@@ -842,6 +842,84 @@ impl<T: Hash> Hash for CompactVec<T> {
     }
 }
 
+#[cfg(feature = "serde")]
+use ::serde::ser::SerializeMap;
+
+#[cfg(feature = "serde")]
+impl<K, V, A> ::serde::Serialize for OpenAddressingMap<K, V, A>
+where
+    K: Copy + Eq + Hash + ::serde::Serialize,
+    V: Compact + ::serde::Serialize,
+    A: Allocator,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.len()))?;
+        for (k, v) in self.pairs() {
+            map.serialize_entry(k, v)?;
+        }
+        map.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+struct OpenAddressingMapVisitor<K, V, A: Allocator> {
+    marker: PhantomData<fn() -> OpenAddressingMap<K, V, A>>
+}
+
+#[cfg(feature = "serde")]
+impl<K, V, A: Allocator> OpenAddressingMapVisitor<K, V, A> {
+    fn new() -> Self {
+        OpenAddressingMapVisitor {
+            marker: PhantomData
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, K, V, A> ::serde::de::Visitor<'de> for OpenAddressingMapVisitor<K, V, A>
+where
+    K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
+    V: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator
+{
+    type Value = OpenAddressingMap<K, V, A>;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str("A Compact Hash Map")
+    }
+
+    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+    where
+        M: ::serde::de::MapAccess<'de>,
+    {
+        let mut map = OpenAddressingMap::with_capacity(access.size_hint().unwrap_or(0));
+
+        while let Some((key, value)) = access.next_entry()? {
+            map.insert(key, value);
+        }
+
+        Ok(map)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, K, V, A> ::serde::de::Deserialize<'de> for OpenAddressingMap<K, V, A>
+where
+    K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
+    V: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(OpenAddressingMapVisitor::new())
+    }
+}
+
 #[cfg(test)]
 fn elem(n: usize) -> usize {
     (n * n) as usize

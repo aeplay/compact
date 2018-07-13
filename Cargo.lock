@@ -4,6 +4,7 @@ version = "0.2.0"
 dependencies = [
  "lazy_static 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "primal 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.70 (registry+https://github.com/rust-lang/crates.io-index)",
  "simple_allocator_trait 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -73,6 +74,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde"
+version = "1.0.70"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "simple_allocator_trait"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -92,5 +98,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum primal-check 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "8e65f96c0a171f887198c274392c99a116ef65aa7f53f3b6d4902f493965c2d1"
 "checksum primal-estimate 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "56ea4531dde757b56906493c8604641da14607bf9cdaa80fb9c9cabd2429f8d5"
 "checksum primal-sieve 0.2.9 (registry+https://github.com/rust-lang/crates.io-index)" = "da2d6ed369bb4b0273aeeb43f07c105c0117717cbae827b20719438eb2eb798c"
+"checksum serde 1.0.70 (registry+https://github.com/rust-lang/crates.io-index)" = "0c3adf19c07af6d186d91dae8927b83b0553d07ca56cbf7f2f32560455c91920"
 "checksum simple_allocator_trait 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "20fcbf3a7402a7ede03ef1baa0026f139758125a973fe8abd9ecbd4332dc2b39"
 "checksum smallvec 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "312a7df010092e73d6bbaf141957e868d4f30efd2bfd9bb1028ad91abec58514"
