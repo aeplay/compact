@@ -494,6 +494,81 @@ impl<T: Compact + ::std::fmt::Debug, A: Allocator> ::std::fmt::Debug for Compact
     }
 }
 
+#[cfg(feature = "serde-serialization")]
+use ::serde::ser::SerializeSeq;
+
+#[cfg(feature = "serde-serialization")]
+impl<T, A> ::serde::ser::Serialize for CompactVec<T, A>
+where
+    T: Compact + ::serde::ser::Serialize,
+    A: Allocator
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::ser::Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(self.len()))?;
+        for e in self {
+            seq.serialize_element(e)?;
+        }
+        seq.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+struct CompactVecVisitor<T, A: Allocator> {
+    marker: PhantomData<fn() -> CompactVec<T, A>>
+}
+
+#[cfg(feature = "serde")]
+impl<T, A: Allocator> CompactVecVisitor<T, A> {
+    fn new() -> Self {
+        CompactVecVisitor {
+            marker: PhantomData
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, A> ::serde::de::Visitor<'de> for CompactVecVisitor<T, A>
+where
+    T: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator
+{
+    type Value = CompactVec<T, A>;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str("A Compact Vector")
+    }
+
+    fn visit_seq<S>(self, mut access: S) -> Result<Self::Value, S::Error>
+    where
+        S: ::serde::de::SeqAccess<'de>,
+    {
+        let mut vector = CompactVec::with_capacity(access.size_hint().unwrap_or(0));
+
+        while let Some(element) = access.next_element()? {
+            vector.push(element);
+        }
+
+        Ok(vector)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, A> ::serde::de::Deserialize<'de> for CompactVec<T, A>
+where
+    T: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(CompactVecVisitor::new())
+    }
+}
+
 #[test]
 fn basic_vector() {
     let mut list: CompactVec<u32> = CompactVec::new();

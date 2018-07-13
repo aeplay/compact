@@ -1,7 +1,7 @@
 [package]
 name = "compact"
 description = "Store objects containing dynamic fields either compactly in consecutive memory or using traditional heap pointers"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Anselm Eickhoff <anselm.eickhoff@gmail.com>"]
 repository = "https://github.com/aeickhoff/compact"
 license = "MIT"
