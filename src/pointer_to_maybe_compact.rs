@@ -3,21 +3,23 @@ use std;
 /// 1. Free: On the heap - Stores a pointer
 /// 2. Compact: On the dynamic part - Stores an offset
 /// 3. Null
-enum Inner<T> {
-    Free(*mut T),
+enum Inner {
+    Free(u64),
     Compact(isize),
     Uninitialized,
 }
 
 /// See Inner
 pub struct PointerToMaybeCompact<T> {
-    inner: Inner<T>,
+    inner: Inner,
+    marker: ::std::marker::PhantomData<*mut T>
 }
 
 impl<T> Default for PointerToMaybeCompact<T> {
     fn default() -> PointerToMaybeCompact<T> {
         PointerToMaybeCompact {
             inner: Inner::Uninitialized,
+            marker: ::std::marker::PhantomData
         }
     }
 }
@@ -32,13 +34,14 @@ impl<T> PointerToMaybeCompact<T> {
     /// Create a new pointer which is initialized to point on the heap
     pub fn new_free(ptr: *mut T) -> Self {
         PointerToMaybeCompact {
-            inner: Inner::Free(ptr),
+            inner: Inner::Free(ptr as u64),
+            marker: ::std::marker::PhantomData
         }
     }
 
     /// Set the pointer to point on the heap
     pub fn set_to_free(&mut self, ptr: *mut T) {
-        self.inner = Inner::Free(ptr)
+        self.inner = Inner::Free(ptr as u64)
     }
 
     /// Set the pointer to point on the dynamic part of the data structure
@@ -49,7 +52,7 @@ impl<T> PointerToMaybeCompact<T> {
     /// Get a raw pointer to wherever it is pointing
     pub unsafe fn ptr(&self) -> *const T {
         match self.inner {
-            Inner::Free(ptr) => ptr,
+            Inner::Free(ptr) => ptr as *const T,
             Inner::Compact(offset) => (self as *const Self as *const u8).offset(offset) as *const T,
             Inner::Uninitialized => ::std::ptr::null(),
         }
@@ -58,7 +61,7 @@ impl<T> PointerToMaybeCompact<T> {
     /// Get a mut pointer to wherever it is pointing
     pub unsafe fn mut_ptr(&mut self) -> *mut T {
         match self.inner {
-            Inner::Free(ptr) => ptr,
+            Inner::Free(ptr) => ptr as *mut T,
             Inner::Compact(offset) => (self as *mut Self as *mut u8).offset(offset) as *mut T,
             Inner::Uninitialized => ::std::ptr::null_mut(),
         }
@@ -74,7 +77,7 @@ impl<T> PointerToMaybeCompact<T> {
 
     pub fn to_string(&self) -> String {
         match self.inner {
-            Inner::Free(p) => format!("Free {:p}", p),
+            Inner::Free(p) => format!("Free {:p}", p as *const T),
             Inner::Compact(i) => format!("Compact {:?}", i),
             Inner::Uninitialized => String::from("uninitialized"),
         }
@@ -85,7 +88,7 @@ impl<T: Default> PointerToMaybeCompact<T> {
     pub fn init_with_default(&self, i: isize) {
         match self.inner {
             Inner::Uninitialized | Inner::Compact(_) => (),
-            Inner::Free(p) => (unsafe { std::ptr::write(p.offset(i), T::default()) }),
+            Inner::Free(p) => (unsafe { std::ptr::write((p as *mut T).offset(i), T::default()) }),
         }
     }
 }
