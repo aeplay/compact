@@ -5,7 +5,7 @@ use std;
 /// 3. Null
 enum Inner {
     Free(u64),
-    Compact(isize),
+    Compact(i32),
     Uninitialized,
 }
 
@@ -46,14 +46,14 @@ impl<T> PointerToMaybeCompact<T> {
 
     /// Set the pointer to point on the dynamic part of the data structure
     pub fn set_to_compact(&mut self, ptr: *mut T) {
-        self.inner = Inner::Compact(ptr as isize - self as *const Self as isize);
+        self.inner = Inner::Compact((ptr as isize - self as *const Self as isize) as i32);
     }
 
     /// Get a raw pointer to wherever it is pointing
     pub unsafe fn ptr(&self) -> *const T {
         match self.inner {
             Inner::Free(ptr) => ptr as *const T,
-            Inner::Compact(offset) => (self as *const Self as *const u8).offset(offset) as *const T,
+            Inner::Compact(offset) => (self as *const Self as *const u8).offset(offset as isize) as *const T,
             Inner::Uninitialized => ::std::ptr::null(),
         }
     }
@@ -62,7 +62,7 @@ impl<T> PointerToMaybeCompact<T> {
     pub unsafe fn mut_ptr(&mut self) -> *mut T {
         match self.inner {
             Inner::Free(ptr) => ptr as *mut T,
-            Inner::Compact(offset) => (self as *mut Self as *mut u8).offset(offset) as *mut T,
+            Inner::Compact(offset) => (self as *mut Self as *mut u8).offset(offset as isize) as *mut T,
             Inner::Uninitialized => ::std::ptr::null_mut(),
         }
     }
