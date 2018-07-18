@@ -789,6 +789,21 @@ impl<K: Copy + Eq + Hash, V: Compact + Clone, A: Allocator> ::std::iter::FromIte
     }
 }
 
+impl<
+        K: Copy + Eq + Hash + ::std::fmt::Debug,
+        V: Compact + Clone + ::std::fmt::Debug,
+        A: Allocator,
+    > ::std::fmt::Debug for OpenAddressingMap<K, V, A>
+{
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "CHashMap{{ ")?;
+        for (key, value) in self.pairs() {
+            write!(f, "{:?} => {:?},", key, value)?;
+        }
+        write!(f, " }}")
+    }
+}
+
 impl<K: Hash + Eq + Copy, I: Compact, A1: Allocator, A2: Allocator>
     OpenAddressingMap<K, CompactVec<I, A1>, A2>
 {
@@ -843,7 +858,7 @@ impl<T: Hash> Hash for CompactVec<T> {
 }
 
 #[cfg(feature = "serde")]
-use ::serde::ser::SerializeMap;
+use serde::ser::SerializeMap;
 
 #[cfg(feature = "serde")]
 impl<K, V, A> ::serde::Serialize for OpenAddressingMap<K, V, A>
@@ -866,14 +881,14 @@ where
 
 #[cfg(feature = "serde")]
 struct OpenAddressingMapVisitor<K, V, A: Allocator> {
-    marker: PhantomData<fn() -> OpenAddressingMap<K, V, A>>
+    marker: PhantomData<fn() -> OpenAddressingMap<K, V, A>>,
 }
 
 #[cfg(feature = "serde")]
 impl<K, V, A: Allocator> OpenAddressingMapVisitor<K, V, A> {
     fn new() -> Self {
         OpenAddressingMapVisitor {
-            marker: PhantomData
+            marker: PhantomData,
         }
     }
 }
@@ -883,7 +898,7 @@ impl<'de, K, V, A> ::serde::de::Visitor<'de> for OpenAddressingMapVisitor<K, V, 
 where
     K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
     V: Compact + ::serde::de::Deserialize<'de>,
-    A: Allocator
+    A: Allocator,
 {
     type Value = OpenAddressingMap<K, V, A>;
 
@@ -910,7 +925,7 @@ impl<'de, K, V, A> ::serde::de::Deserialize<'de> for OpenAddressingMap<K, V, A>
 where
     K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
     V: Compact + ::serde::de::Deserialize<'de>,
-    A: Allocator
+    A: Allocator,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -1117,19 +1132,19 @@ fn ensure_capacity_works() {
 #[test]
 fn insert_after_remove_works_same_hash() {
     // get 2 elems with the same hash
-    let mut hashToUsize: HashMap<u32, usize> = HashMap::new();
+    let mut hash_to_usize: HashMap<u32, usize> = HashMap::new();
     let mut bad_pair_opt = None;
     for i in 0..<usize>::max_value() {
         if i % 10000 == 0 {
             println!("i {}", i);
         }
         let hash = OpenAddressingMap::<usize, usize>::hash(i);
-        if (hashToUsize.contains_key(&hash)) {
-            let p: usize = *hashToUsize.get(&hash).unwrap();
+        if hash_to_usize.contains_key(&hash) {
+            let p: usize = *hash_to_usize.get(&hash).unwrap();
             bad_pair_opt = Some((i, p));
             break;
         }
-        hashToUsize.insert(hash, i);
+        hash_to_usize.insert(hash, i);
     }
 
     type NestedType = OpenAddressingMap<usize, usize>;
@@ -1147,7 +1162,7 @@ fn insert_after_remove_works_same_hash() {
     println!("map {}", map.display());
 
     let mut n1 = 0;
-    for (key, value) in map.pairs() {
+    for (key, _) in map.pairs() {
         if *key == bad_pair.1 {
             n1 += 1;
         }
