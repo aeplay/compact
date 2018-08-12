@@ -198,13 +198,18 @@ impl<T: Compact + Clone, A: Allocator> CompactVec<T, A> {
     ///
     /// This does not preserve ordering, but is O(1).
     pub fn swap_remove(&mut self, index: usize) -> T {
-        let length = self.len();
         unsafe {
-            Compact::decompact(&self[index]);
-            Compact::decompact(&self[length - 1]);
+            let ret = Compact::decompact(&self[index]);
+            let len = self.len;
+
+            ptr::write(
+                self.as_mut_ptr().offset(index as isize),
+                Compact::decompact(&self[len as usize - 1]),
+            );
+
+            self.len -= 1;
+            ret
         }
-        self.swap(index, length - 1);
-        self.pop().unwrap()
     }
 
     /// Take a function which returns whether an element should be kept,
