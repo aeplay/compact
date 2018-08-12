@@ -3,6 +3,9 @@ use std::mem;
 /// A trait for objects with a statically-sized part and a potential dynamically-sized part
 /// that can be stored both compactly in consecutive memory or freely on the heap
 pub trait Compact: Sized + Clone {
+    // TODO: add a move_compact function to handle moving within a parent container
+    // (so relative to own dynamic part) more efficiently than decompacting
+
     /// Is the object's dynamic part stored compactly?
     fn is_still_compact(&self) -> bool;
 
