@@ -192,6 +192,21 @@ impl<T: Compact + Clone, A: Allocator> CompactVec<T, A> {
         }
     }
 
+    /// Removes an element from the vector and returns it.
+    ///
+    /// The removed element is replaced by the last element of the vector.
+    ///
+    /// This does not preserve ordering, but is O(1).
+    pub fn swap_remove(&mut self, index: usize) -> T {
+        let length = self.len();
+        unsafe {
+            Compact::decompact(&self[index]);
+            Compact::decompact(&self[length - 1]);
+        }
+        self.swap(index, length - 1);
+        self.pop().unwrap()
+    }
+
     /// Take a function which returns whether an element should be kept,
     /// and mutably removes all elements from the vector which are not kept
     pub fn retain<F: FnMut(&T) -> bool>(&mut self, mut keep: F) {
