@@ -20,6 +20,7 @@ use std::ptr;
 #[derive(Clone)]
 struct Entry<K, V> {
     hash: u32,
+    // TODO: is this redundant since inner is an Option? Maybe this will prevent bugs...
     tombstoned: bool,
     inner: Option<(K, V)>,
 }
@@ -156,15 +157,23 @@ impl<K, V> Default for Entry<K, V> {
 
 impl<K: Copy, V: Compact> Compact for Entry<K, V> {
     default fn is_still_compact(&self) -> bool {
-        self.inner
-            .as_ref()
-            .map_or(true, |kv_tuple| kv_tuple.1.is_still_compact())
+        if self.tombstoned {
+            true
+        } else {
+            self.inner
+                .as_ref()
+                .map_or(true, |kv_tuple| kv_tuple.1.is_still_compact())
+        }
     }
 
     default fn dynamic_size_bytes(&self) -> usize {
-        self.inner
-            .as_ref()
-            .map_or(0, |kv_tuple| kv_tuple.1.dynamic_size_bytes())
+        if self.tombstoned {
+            0
+        } else {
+            self.inner
+                .as_ref()
+                .map_or(0, |kv_tuple| kv_tuple.1.dynamic_size_bytes())
+        }
     }
 
     default unsafe fn compact(source: *mut Self, dest: *mut Self, new_dynamic_part: *mut u8) {
