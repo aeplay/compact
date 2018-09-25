@@ -2,7 +2,6 @@ extern crate primal;
 
 use super::compact::Compact;
 use super::compact_vec::CompactVec;
-use super::pointer_to_maybe_compact::PointerToMaybeCompact;
 use super::simple_allocator_trait::{Allocator, DefaultHeap};
 use std::collections::hash_map::DefaultHasher;
 #[cfg(test)]
@@ -13,37 +12,13 @@ use std::iter::Iterator;
 
 use std;
 use std::fmt::Write;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::ptr;
 
 #[derive(Clone)]
 struct Entry<K, V> {
     hash: u32,
-    // TODO: is this redundant since inner is an Option? Maybe this will prevent bugs...
+    // TODO: is this redundant since inner is an Option?
     tombstoned: bool,
     inner: Option<(K, V)>,
-}
-
-// to fix Copmact<T:Copy> clash
-pub trait TrivialCompact {}
-
-/// A dynamically-sized array that can be stored in compact sequential storage and
-/// automatically spills over into free heap storage using `Allocator`.
-#[derive(Default)]
-struct CompactArray<T, A: Allocator = DefaultHeap> {
-    /// Points to either compact or free storage
-    ptr: PointerToMaybeCompact<T>,
-    /// Maximum capacity before needing to spill onto the heap
-    cap: u32,
-    _alloc: PhantomData<*const A>,
-}
-
-pub struct IntoIter<T, A: Allocator> {
-    ptr: PointerToMaybeCompact<T>,
-    cap: usize,
-    index: usize,
-    _alloc: PhantomData<*const A>,
 }
 
 struct QuadraticProbingIterator<'a, K: 'a, V: 'a, A: 'a + Allocator = DefaultHeap> {
@@ -66,7 +41,7 @@ struct QuadraticProbingMutIterator<'a, K: 'a, V: 'a, A: 'a + Allocator = Default
 pub struct OpenAddressingMap<K, V, A: Allocator = DefaultHeap> {
     number_alive: u32,
     number_used: u32,
-    entries: CompactArray<Entry<K, V>, A>,
+    entries: CompactVec<Entry<K, V>, A>,
 }
 
 impl<K: Eq, V: Clone> Entry<K, V> {
@@ -136,8 +111,6 @@ impl<K: Eq, V: Clone> Entry<K, V> {
         (kv.0, kv.1)
     }
 }
-
-impl<K: Copy, V: Copy> TrivialCompact for Entry<K, V> {}
 
 impl<K, V> std::fmt::Debug for Entry<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -231,262 +204,32 @@ impl<K: Copy, V: Copy> Compact for Entry<K, V> {
     }
 }
 
-impl<T: Default, A: Allocator> CompactArray<T, A> {
-    /// Is the vector empty?
-    pub fn is_empty(&self) -> bool {
-        self.cap == 0
-    }
-
-    /// Create a new, empty vector
-    #[cfg_attr(feature = "cargo-clippy", allow(new_without_default_derive))]
-    pub fn new() -> CompactArray<T, A> {
-        CompactArray {
-            ptr: PointerToMaybeCompact::default(),
-            cap: 0,
-            _alloc: PhantomData,
-        }
-    }
-
-    /// Create a new, empty vector with a given capacity
-    pub fn with_capacity(cap: usize) -> CompactArray<T, A> {
-        let mut vec = CompactArray {
-            ptr: PointerToMaybeCompact::default(),
-            cap: cap as u32,
-            _alloc: PhantomData,
-        };
-
-        vec.ptr.set_to_free(A::allocate::<T>(cap));
-
-        for i in 0..cap {
-            vec.ptr.init_with_default(i as isize);
-        }
-
-        vec
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.cap as usize
-    }
-}
-
-impl<T, A: Allocator> From<Vec<T>> for CompactArray<T, A> {
-    /// Create a `CompactArray` from a normal `Vec`,
-    /// directly using the backing storage as free heap storage
-    fn from(mut vec: Vec<T>) -> Self {
-        let p = vec.as_mut_ptr();
-        let cap = vec.len();
-
-        ::std::mem::forget(vec);
-
-        CompactArray {
-            ptr: PointerToMaybeCompact::new_free(p),
-            cap: cap as u32,
-            _alloc: PhantomData,
-        }
-    }
-}
-
-impl<T, A: Allocator> Drop for CompactArray<T, A> {
-    /// Drop elements and deallocate free heap storage, if any is allocated
-    fn drop(&mut self) {
-        unsafe { ptr::drop_in_place(&mut self[..]) };
-        if !self.ptr.is_compact() {
-            unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap as usize);
-            }
-        }
-    }
-}
-
-impl<T, A: Allocator> Deref for CompactArray<T, A> {
-    type Target = [T];
-
-    fn deref(&self) -> &[T] {
-        unsafe { ::std::slice::from_raw_parts(self.ptr.ptr(), self.cap as usize) }
-    }
-}
-
-impl<T, A: Allocator> DerefMut for CompactArray<T, A> {
-    fn deref_mut(&mut self) -> &mut [T] {
-        unsafe { ::std::slice::from_raw_parts_mut(self.ptr.mut_ptr(), self.cap as usize) }
-    }
-}
-
-impl<T, A: Allocator> Iterator for IntoIter<T, A> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<T> {
-        if self.index < self.cap {
-            let item = unsafe { ptr::read(self.ptr.ptr().offset(self.index as isize)) };
-            self.index += 1;
-            Some(item)
-        } else {
-            None
-        }
-    }
-}
-
-impl<T, A: Allocator> Drop for IntoIter<T, A> {
-    fn drop(&mut self) {
-        // drop all remaining elements
-        unsafe {
-            ptr::drop_in_place(&mut ::std::slice::from_raw_parts(
-                self.ptr.ptr().offset(self.index as isize),
-                self.cap,
-            ))
-        };
-        if !self.ptr.is_compact() {
-            unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap);
-            }
-        }
-    }
-}
-
-impl<T, A: Allocator> IntoIterator for CompactArray<T, A> {
-    type Item = T;
-    type IntoIter = IntoIter<T, A>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let iter = IntoIter {
-            ptr: unsafe { ptr::read(&self.ptr) },
-            cap: self.cap as usize,
-            index: 0,
-            _alloc: PhantomData,
-        };
-        ::std::mem::forget(self);
-        iter
-    }
-}
-
-impl<'a, T, A: Allocator> IntoIterator for &'a CompactArray<T, A> {
-    type Item = &'a T;
-    type IntoIter = ::std::slice::Iter<'a, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-impl<'a, T, A: Allocator> IntoIterator for &'a mut CompactArray<T, A> {
-    type Item = &'a mut T;
-    type IntoIter = ::std::slice::IterMut<'a, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter_mut()
-    }
-}
-
-impl<T: Compact + Sized, A: Allocator> Compact for CompactArray<T, A> {
-    default fn is_still_compact(&self) -> bool {
-        self.ptr.is_compact() && self.iter().all(|elem| elem.is_still_compact())
-    }
-
-    default fn dynamic_size_bytes(&self) -> usize {
-        self.cap as usize * ::std::mem::size_of::<T>()
-            + self
-                .iter()
-                .map(|elem| elem.dynamic_size_bytes())
-                .sum::<usize>()
-    }
-
-    default unsafe fn compact(source: *mut Self, dest: *mut Self, new_dynamic_part: *mut u8) {
-        (*dest).cap = (*source).cap;
-        (*dest).ptr.set_to_compact(new_dynamic_part as *mut T);
-
-        let mut offset = (*source).cap as usize * ::std::mem::size_of::<T>();
-        for i in 0..(*source).cap as usize {
-            Compact::compact(
-                &mut (*source)[i],
-                &mut (*dest)[i],
-                new_dynamic_part.offset(offset as isize),
-            );
-            offset += (*source)[i].dynamic_size_bytes();
-        }
-    }
-
-    default unsafe fn decompact(source: *const Self) -> Self {
-        if (*source).ptr.is_compact() {
-            (*source).clone()
-        } else {
-            CompactArray {
-                ptr: ptr::read(&(*source).ptr as *const PointerToMaybeCompact<T>),
-                cap: (*source).cap,
-                _alloc: (*source)._alloc,
-            }
-            // caller has to make sure that self will not be dropped!
-        }
-    }
-}
-
-impl<T: TrivialCompact + Compact, A: Allocator> Compact for CompactArray<T, A> {
-    fn is_still_compact(&self) -> bool {
-        self.ptr.is_compact()
-    }
-
-    fn dynamic_size_bytes(&self) -> usize {
-        self.cap as usize * ::std::mem::size_of::<T>()
-    }
-
-    unsafe fn compact(source: *mut Self, dest: *mut Self, new_dynamic_part: *mut u8) {
-        (*dest).cap = (*source).cap;
-        (*dest).ptr.set_to_compact(new_dynamic_part as *mut T);
-        ptr::copy_nonoverlapping(
-            (*source).ptr.ptr(),
-            (*dest).ptr.mut_ptr(),
-            (*source).cap as usize,
-        );
-    }
-}
-
-impl<T: Clone, A: Allocator> Clone for CompactArray<T, A> {
-    default fn clone(&self) -> CompactArray<T, A> {
-        self.iter().cloned().collect::<Vec<_>>().into()
-    }
-}
-
-impl<T: Copy + Default, A: Allocator> Clone for CompactArray<T, A> {
-    fn clone(&self) -> CompactArray<T, A> {
-        let mut new_vec = Self::with_capacity(self.cap as usize);
-        unsafe {
-            ptr::copy_nonoverlapping(self.ptr.ptr(), new_vec.ptr.mut_ptr(), self.cap as usize);
-        }
-        new_vec
-    }
-}
-
-impl<T: Compact + ::std::fmt::Debug, A: Allocator> ::std::fmt::Debug for CompactArray<T, A> {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        (self.deref()).fmt(f)
-    }
-}
-
 lazy_static! {
     static ref PRIME_SIEVE: primal::Sieve = { primal::Sieve::new(1_000_000) };
 }
 
-impl<'a, K, V, A: Allocator> QuadraticProbingIterator<'a, K, V, A> {
+impl<'a, K: Copy, V: Compact, A: Allocator> QuadraticProbingIterator<'a, K, V, A> {
     fn for_map(
         map: &'a OpenAddressingMap<K, V, A>,
         hash: u32,
     ) -> QuadraticProbingIterator<K, V, A> {
         QuadraticProbingIterator {
             i: 0,
-            number_used: map.entries.cap as usize,
+            number_used: map.entries.capacity(),
             hash,
             map,
         }
     }
 }
 
-impl<'a, K, V, A: Allocator> QuadraticProbingMutIterator<'a, K, V, A> {
+impl<'a, K: Copy, V: Compact, A: Allocator> QuadraticProbingMutIterator<'a, K, V, A> {
     fn for_map(
         map: &'a mut OpenAddressingMap<K, V, A>,
         hash: u32,
     ) -> QuadraticProbingMutIterator<K, V, A> {
         QuadraticProbingMutIterator {
             i: 0,
-            number_used: map.entries.cap as usize,
+            number_used: map.entries.capacity(),
             hash,
             map,
         }
@@ -526,7 +269,7 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> OpenAddressingMap<K, V, A> {
     /// constructor
     pub fn with_capacity(l: usize) -> Self {
         OpenAddressingMap {
-            entries: CompactArray::with_capacity(Self::find_prime_larger_than(l)),
+            entries: vec![Entry::default(); Self::find_next_prime(l)].into(),
             number_alive: 0,
             number_used: 0,
         }
@@ -671,26 +414,25 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> OpenAddressingMap<K, V, A> {
 
     fn ensure_capacity(&mut self) {
         if self.number_used as usize > self.entries.capacity() / 2 {
-            let old_entries = self.entries.clone();
-
-            let mut new_capacity = Self::find_prime_larger_than(old_entries.capacity() * 2);
+            let mut new_capacity = self.entries.capacity() * 2;
 
             // if there are lots of dead entries we do not need to double
             // we are going to just garbage collect them
             let number_dead = self.entries.capacity() - self.number_alive as usize;
             if number_dead > self.entries.capacity() / 2 {
-                new_capacity = old_entries.capacity();
+                new_capacity = self.entries.capacity();
             }
 
-            self.entries = CompactArray::with_capacity(new_capacity);
-            self.number_alive = 0;
-            self.number_used = 0;
-            for entry in old_entries {
+            let mut new_hash_map = Self::with_capacity(new_capacity);
+
+            for entry in self.entries.drain() {
                 if entry.alive() {
                     let tuple = entry.into_tuple();
-                    self.insert(tuple.0, tuple.1);
+                    new_hash_map.insert(tuple.0, tuple.1);
                 }
             }
+
+            *self = new_hash_map;
         }
     }
 
@@ -721,8 +463,8 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> OpenAddressingMap<K, V, A> {
         QuadraticProbingMutIterator::for_map(self, hash)
     }
 
-    fn find_prime_larger_than(n: usize) -> usize {
-        PRIME_SIEVE.primes_from(n).find(|&i| i > n).unwrap()
+    fn find_next_prime(n: usize) -> usize {
+        PRIME_SIEVE.primes_from(n).find(|&i| i >= n).unwrap()
     }
 
     fn display(&self) -> String {
@@ -768,7 +510,7 @@ impl<K: Copy + Eq + Hash, V: Compact, A: Allocator> Compact for OpenAddressingMa
     }
 }
 
-impl<K: Copy, V: Clone, A: Allocator> Clone for OpenAddressingMap<K, V, A> {
+impl<K: Copy, V: Compact + Clone, A: Allocator> Clone for OpenAddressingMap<K, V, A> {
     fn clone(&self) -> Self {
         OpenAddressingMap {
             entries: self.entries.clone(),
@@ -947,52 +689,6 @@ where
 #[cfg(test)]
 fn elem(n: usize) -> usize {
     (n * n) as usize
-}
-
-#[test]
-fn array_basic() {
-    let mut arr: CompactArray<u32> = CompactArray::with_capacity(2);
-    arr[0] = 5;
-    assert!(arr[0] == 5);
-    arr[1] = 4;
-    assert!(arr[1] == 4);
-    arr[0] = 6;
-    arr[1] = 7;
-    assert!(arr[0] == 6);
-    assert!(arr[1] == 7);
-}
-
-#[test]
-fn array_basic2() {
-    let mut arr: CompactArray<u32> = CompactArray::with_capacity(3);
-    arr[0] = 5;
-    assert!(arr[0] == 5);
-    arr[1] = 4;
-    assert!(arr[1] == 4);
-    arr[0] = 6;
-    arr[1] = 7;
-    assert!(arr[0] == 6);
-    assert!(arr[1] == 7);
-}
-
-#[test]
-fn array_find() {
-    let mut arr: CompactArray<u32> = CompactArray::with_capacity(3);
-    arr[0] = 5;
-    arr[1] = 0;
-    arr[2] = 6;
-    assert!(arr.iter().find(|&i| *i == 0).is_some());
-}
-
-#[test]
-fn array_clone() {
-    let mut arr: CompactArray<u32> = CompactArray::with_capacity(3);
-    arr[0] = 5;
-    arr[1] = 0;
-    arr[2] = 6;
-    assert!(arr.iter().find(|&i| *i == 0).is_some());
-    let arr2 = arr.clone();
-    assert!(arr2.iter().find(|&i| *i == 0).is_some());
 }
 
 #[test]
