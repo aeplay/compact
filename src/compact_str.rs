@@ -1,5 +1,6 @@
 use super::compact::Compact;
 use super::compact_vec::CompactVec;
+use std::marker::PhantomData;
 
 /// A compact storage for a `String`. So far doesn't support direct mutable operations,
 /// Only conversion from and to `String`/`&str`
@@ -53,5 +54,65 @@ impl Compact for CompactString {
         CompactString {
             chars: Compact::decompact(&(*source).chars),
         }
+    }
+}
+
+#[cfg(feature = "serde-serialization")]
+impl ::serde::ser::Serialize for CompactString{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::ser::Serializer,
+    {
+        serializer.serialize_str(&self)
+    }
+}
+
+#[cfg(feature = "serde")]
+struct CompactStringVisitor {
+    marker: PhantomData<fn() -> CompactString>
+}
+
+#[cfg(feature = "serde")]
+impl CompactStringVisitor {
+    fn new() -> Self {
+        CompactStringVisitor {
+            marker: PhantomData
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> ::serde::de::Visitor<'de> for CompactStringVisitor
+{
+    type Value = CompactString;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str("A string")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: ::serde::de::Error,
+    {
+        Ok(s.to_owned().into())
+    }
+
+    fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
+    where
+        E: ::serde::de::Error,
+    {
+        Ok(s.into())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> ::serde::de::Deserialize<'de> for CompactString
+
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_string(CompactStringVisitor::new())
     }
 }
