@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::iter::Iterator;
+use std::marker::PhantomData;
 
 use std;
 use std::fmt::Write;
@@ -16,7 +17,6 @@ use std::fmt::Write;
 #[derive(Clone)]
 struct Entry<K, V> {
     hash: u32,
-    // TODO: is this redundant since inner is an Option?
     tombstoned: bool,
     inner: Option<(K, V)>,
 }

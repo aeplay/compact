@@ -15,7 +15,6 @@
 
 #![warn(missing_docs)]
 #![feature(specialization)]
-#![feature(optin_builtin_traits)]
 
 extern crate simple_allocator_trait;
 mod pointer_to_maybe_compact;
