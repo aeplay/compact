@@ -1,6 +1,7 @@
 use super::simple_allocator_trait::{Allocator, DefaultHeap};
 use super::compact::Compact;
 use super::compact_vec::CompactVec;
+use std::marker::PhantomData;
 
 /// A simple linear-search key-value dictionary,
 /// implemented using two `CompactVec`'s, one for keys, one for values.
@@ -18,6 +19,14 @@ impl<K: Eq + Copy, V: Compact + Clone, A: Allocator> CompactDict<K, V, A> {
         CompactDict {
             keys: CompactVec::new(),
             values: CompactVec::new(),
+        }
+    }
+
+    /// Create new, empty dictionary with a given capactity
+    pub fn with_capacity(cap: usize) -> Self {
+        CompactDict {
+            keys: CompactVec::with_capacity(cap),
+            values: CompactVec::with_capacity(cap),
         }
     }
 
@@ -228,6 +237,84 @@ impl<K: Copy + Eq, V: Compact + Clone, A: Allocator> ::std::iter::Extend<(K, V)>
         for (key, value) in iter {
             self.insert(key, value);
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+use serde::ser::SerializeMap;
+
+#[cfg(feature = "serde")]
+impl<K, V, A> ::serde::Serialize for CompactDict<K, V, A>
+where
+    K: Copy + Eq + ::serde::Serialize,
+    V: Compact + ::serde::Serialize,
+    A: Allocator,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.len()))?;
+        for (k, v) in self.pairs() {
+            map.serialize_entry(k, v)?;
+        }
+        map.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+struct CompactDictVisitor<K: Copy, V: Compact, A: Allocator> {
+    marker: PhantomData<fn() -> CompactDict<K, V, A>>,
+}
+
+#[cfg(feature = "serde")]
+impl<K: Copy, V: Compact, A: Allocator> CompactDictVisitor<K, V, A> {
+    fn new() -> Self {
+        CompactDictVisitor {
+            marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, K, V, A> ::serde::de::Visitor<'de> for CompactDictVisitor<K, V, A>
+where
+    K: Copy + Eq + ::serde::de::Deserialize<'de>,
+    V: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator,
+{
+    type Value = CompactDict<K, V, A>;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str("A Compact Hash Map")
+    }
+
+    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+    where
+        M: ::serde::de::MapAccess<'de>,
+    {
+        let mut map = CompactDict::with_capacity(access.size_hint().unwrap_or(0));
+
+        while let Some((key, value)) = access.next_entry()? {
+            map.insert(key, value);
+        }
+
+        Ok(map)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, K, V, A> ::serde::de::Deserialize<'de> for CompactDict<K, V, A>
+where
+    K: Copy + Eq + ::serde::de::Deserialize<'de>,
+    V: Compact + ::serde::de::Deserialize<'de>,
+    A: Allocator,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(CompactDictVisitor::new())
     }
 }
 
