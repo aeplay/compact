@@ -1,4 +1,5 @@
 use super::compact::Compact;
+use std::marker::PhantomData;
 
 /// A wrapper to make an `Option` of a nontrivial `Compact` possible.
 /// Unfortunately, we can't blanket-`impl` that, since that overlaps
@@ -51,6 +52,70 @@ impl<T: Clone + Compact> Compact for CompactOption<T> {
         } else {
             CompactOption(None)
         }
+    }
+}
+
+#[cfg(feature = "serde-serialization")]
+impl<T: Compact + ::serde::ser::Serialize> ::serde::ser::Serialize for CompactOption<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ::serde::ser::Serializer,
+    {
+        match self.0 {
+            Some(ref value) => serializer.serialize_some(value),
+            None => serializer.serialize_none(),
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+struct CompactOptionVisitor<T: Compact> {
+    marker: PhantomData<fn() -> CompactOption<T>>,
+}
+
+#[cfg(feature = "serde")]
+impl<T: Compact> CompactOptionVisitor<T> {
+    fn new() -> Self {
+        CompactOptionVisitor {
+            marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: Compact + ::serde::de::Deserialize<'de>> ::serde::de::Visitor<'de>
+    for CompactOptionVisitor<T>
+{
+    type Value = CompactOption<T>;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str("An option")
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        Ok(CompactOption(Some(T::deserialize(deserializer)?)))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: ::serde::de::Error,
+    {
+        Ok(CompactOption(None))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: Compact + ::serde::de::Deserialize<'de>> ::serde::de::Deserialize<'de>
+    for CompactOption<T>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: ::serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_option(CompactOptionVisitor::new())
     }
 }
 
