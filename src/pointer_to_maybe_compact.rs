@@ -75,6 +75,15 @@ impl<T> PointerToMaybeCompact<T> {
         }
     }
 
+    /// Deallocate a memory range starting at pointer if it is in free mode
+    pub fn deallocate_if_free<A: ::simple_allocator_trait::Allocator>(&self, length: usize) {
+        if let Inner::Free(ptr) = self.inner {
+            unsafe {
+                A::deallocate(ptr as *mut T, length);
+            }
+        }
+    }
+
     pub fn to_string(&self) -> String {
         match self.inner {
             Inner::Free(p) => format!("Free {:p}", p as *const T),

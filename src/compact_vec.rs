@@ -79,11 +79,7 @@ impl<T: Compact + Clone, A: Allocator> CompactVec<T, A> {
         }
 
         // items shouldn't be dropped here, they live on in the new backing store!
-        if !self.ptr.is_compact() {
-            unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap as usize);
-            }
-        }
+        self.ptr.deallocate_if_free::<A>(self.cap as usize);
         self.ptr.set_to_free(new_ptr);
         self.cap = new_cap;
     }
@@ -279,11 +275,7 @@ impl<T, A: Allocator> Drop for CompactVec<T, A> {
     /// Drop elements and deallocate free heap storage, if any is allocated
     fn drop(&mut self) {
         unsafe { ptr::drop_in_place(&mut self[..]) };
-        if !self.ptr.is_compact() {
-            unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap as usize);
-            }
-        }
+        self.ptr.deallocate_if_free::<A>(self.cap as usize);
     }
 }
 
@@ -340,11 +332,7 @@ impl<T, A: Allocator> Drop for IntoIter<T, A> {
                 self.len,
             ))
         };
-        if !self.ptr.is_compact() {
-            unsafe {
-                A::deallocate(self.ptr.mut_ptr(), self.cap);
-            }
-        }
+        self.ptr.deallocate_if_free::<A>(self.cap as usize);
     }
 }
 
@@ -415,9 +403,7 @@ impl<T: Compact + Clone, A: Allocator> Compact for CompactVec<T, A> {
 
         // we want to free any allocated space,
         // but not semantically drop our contents (they just moved)
-        if !(*source).ptr.is_compact() {
-            A::deallocate((*source).ptr.mut_ptr(), (*source).cap as usize);
-        }
+        (*source).ptr.deallocate_if_free::<A>((*source).cap as usize);
     }
 
     default unsafe fn decompact(source: *const Self) -> Self {
@@ -460,9 +446,7 @@ impl<T: Copy, A: Allocator> Compact for CompactVec<T, A> {
 
         // we want to free any allocated space,
         // but not semantically drop our contents (they just moved)
-        if !(*source).ptr.is_compact() {
-            A::deallocate((*source).ptr.mut_ptr(), (*source).cap as usize);
-        }
+        (*source).ptr.deallocate_if_free::<A>((*source).cap as usize);
     }
 }
 
