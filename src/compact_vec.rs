@@ -519,12 +519,12 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 struct CompactVecVisitor<T, A: Allocator> {
     marker: PhantomData<fn() -> CompactVec<T, A>>
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<T, A: Allocator> CompactVecVisitor<T, A> {
     fn new() -> Self {
         CompactVecVisitor {
@@ -533,7 +533,7 @@ impl<T, A: Allocator> CompactVecVisitor<T, A> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, T, A> ::serde::de::Visitor<'de> for CompactVecVisitor<T, A>
 where
     T: Compact + ::serde::de::Deserialize<'de>,
@@ -559,7 +559,7 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, T, A> ::serde::de::Deserialize<'de> for CompactVec<T, A>
 where
     T: Compact + ::serde::de::Deserialize<'de>,

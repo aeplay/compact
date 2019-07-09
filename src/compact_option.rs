@@ -55,6 +55,9 @@ impl<T: Clone + Compact> Compact for CompactOption<T> {
 }
 
 #[cfg(feature = "serde-serialization")]
+use std::marker::PhantomData;
+
+#[cfg(feature = "serde-serialization")]
 impl<T: Compact + ::serde::ser::Serialize> ::serde::ser::Serialize for CompactOption<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -67,12 +70,12 @@ impl<T: Compact + ::serde::ser::Serialize> ::serde::ser::Serialize for CompactOp
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 struct CompactOptionVisitor<T: Compact> {
     marker: PhantomData<fn() -> CompactOption<T>>,
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<T: Compact> CompactOptionVisitor<T> {
     fn new() -> Self {
         CompactOptionVisitor {
@@ -81,7 +84,7 @@ impl<T: Compact> CompactOptionVisitor<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, T: Compact + ::serde::de::Deserialize<'de>> ::serde::de::Visitor<'de>
     for CompactOptionVisitor<T>
 {
@@ -106,7 +109,7 @@ impl<'de, T: Compact + ::serde::de::Deserialize<'de>> ::serde::de::Visitor<'de>
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, T: Compact + ::serde::de::Deserialize<'de>> ::serde::de::Deserialize<'de>
     for CompactOption<T>
 {

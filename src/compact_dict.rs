@@ -250,10 +250,12 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 use serde::ser::SerializeMap;
+#[cfg(feature = "serde-serialization")]
+use std::marker::PhantomData;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<K, V, A> ::serde::Serialize for CompactDict<K, V, A>
 where
     K: Copy + Eq + ::serde::Serialize,
@@ -272,12 +274,12 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 struct CompactDictVisitor<K: Copy, V: Compact, A: Allocator> {
     marker: PhantomData<fn() -> CompactDict<K, V, A>>,
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<K: Copy, V: Compact, A: Allocator> CompactDictVisitor<K, V, A> {
     fn new() -> Self {
         CompactDictVisitor {
@@ -286,7 +288,7 @@ impl<K: Copy, V: Compact, A: Allocator> CompactDictVisitor<K, V, A> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, K, V, A> ::serde::de::Visitor<'de> for CompactDictVisitor<K, V, A>
 where
     K: Copy + Eq + ::serde::de::Deserialize<'de>,
@@ -313,7 +315,7 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, K, V, A> ::serde::de::Deserialize<'de> for CompactDict<K, V, A>
 where
     K: Copy + Eq + ::serde::de::Deserialize<'de>,

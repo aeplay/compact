@@ -57,6 +57,9 @@ impl Compact for CompactString {
 }
 
 #[cfg(feature = "serde-serialization")]
+use std::marker::PhantomData;
+
+#[cfg(feature = "serde-serialization")]
 impl ::serde::ser::Serialize for CompactString{
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -66,12 +69,12 @@ impl ::serde::ser::Serialize for CompactString{
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 struct CompactStringVisitor {
     marker: PhantomData<fn() -> CompactString>
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl CompactStringVisitor {
     fn new() -> Self {
         CompactStringVisitor {
@@ -80,7 +83,7 @@ impl CompactStringVisitor {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de> ::serde::de::Visitor<'de> for CompactStringVisitor
 {
     type Value = CompactString;
@@ -104,7 +107,7 @@ impl<'de> ::serde::de::Visitor<'de> for CompactStringVisitor
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de> ::serde::de::Deserialize<'de> for CompactString
 
 {

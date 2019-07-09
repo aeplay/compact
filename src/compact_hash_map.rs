@@ -603,10 +603,12 @@ impl<T: Hash> Hash for CompactVec<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 use serde::ser::SerializeMap;
+#[cfg(feature = "serde-serialization")]
+use std::marker::PhantomData;
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<K, V, A> ::serde::Serialize for OpenAddressingMap<K, V, A>
 where
     K: Copy + Eq + Hash + ::serde::Serialize,
@@ -625,12 +627,12 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 struct OpenAddressingMapVisitor<K, V, A: Allocator> {
     marker: PhantomData<fn() -> OpenAddressingMap<K, V, A>>,
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<K, V, A: Allocator> OpenAddressingMapVisitor<K, V, A> {
     fn new() -> Self {
         OpenAddressingMapVisitor {
@@ -639,7 +641,7 @@ impl<K, V, A: Allocator> OpenAddressingMapVisitor<K, V, A> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, K, V, A> ::serde::de::Visitor<'de> for OpenAddressingMapVisitor<K, V, A>
 where
     K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
@@ -666,7 +668,7 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serde-serialization")]
 impl<'de, K, V, A> ::serde::de::Deserialize<'de> for OpenAddressingMap<K, V, A>
 where
     K: Copy + Eq + Hash + ::serde::de::Deserialize<'de>,
