@@ -1,10 +1,9 @@
 use super::compact::Compact;
-use std::marker::PhantomData;
 
 /// A wrapper to make an `Option` of a nontrivial `Compact` possible.
 /// Unfortunately, we can't blanket-`impl` that, since that overlaps
 /// (for the compiler) with the `impl` for trivial `Copy` types...
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct CompactOption<T: Compact + Clone>(pub Option<T>);
 
 impl<T: Compact + Clone> ::std::ops::Deref for CompactOption<T> {

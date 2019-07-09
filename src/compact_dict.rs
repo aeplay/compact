@@ -1,7 +1,6 @@
 use super::simple_allocator_trait::{Allocator, DefaultHeap};
 use super::compact::Compact;
 use super::compact_vec::CompactVec;
-use std::marker::PhantomData;
 
 /// A simple linear-search key-value dictionary,
 /// implemented using two `CompactVec`'s, one for keys, one for values.
@@ -237,6 +236,17 @@ impl<K: Copy + Eq, V: Compact + Clone, A: Allocator> ::std::iter::Extend<(K, V)>
         for (key, value) in iter {
             self.insert(key, value);
         }
+    }
+}
+
+impl<K, V, A> ::std::fmt::Debug for CompactDict<K, V, A>
+where
+    K: Copy + Eq + ::std::fmt::Debug,
+    V: Compact + ::std::fmt::Debug,
+    A: Allocator,
+{
+    fn fmt(&self, fmt: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        fmt.debug_map().entries(self.pairs()).finish()
     }
 }
 

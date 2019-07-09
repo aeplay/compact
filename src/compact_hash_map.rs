@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::iter::Iterator;
-use std::marker::PhantomData;
 
 use std;
 use std::fmt::Write;
@@ -547,11 +546,7 @@ impl<
     > ::std::fmt::Debug for OpenAddressingMap<K, V, A>
 {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "CHashMap{{ ")?;
-        for (key, value) in self.pairs() {
-            write!(f, "{:?} => {:?},", key, value)?;
-        }
-        write!(f, " }}")
+        f.debug_map().entries(self.pairs()).finish()
     }
 }
 

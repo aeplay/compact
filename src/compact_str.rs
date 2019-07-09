@@ -1,6 +1,5 @@
 use super::compact::Compact;
 use super::compact_vec::CompactVec;
-use std::marker::PhantomData;
 
 /// A compact storage for a `String`. So far doesn't support direct mutable operations,
 /// Only conversion from and to `String`/`&str`
